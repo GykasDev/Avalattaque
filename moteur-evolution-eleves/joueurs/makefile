@@ -13,7 +13,7 @@ INC=-I../include
 OPTS=-D_POSIX_C_SOURCE=199309L -std=c99
 
 
-SRC=humain1.c humain2.c humain3.c joueur1.c joueur2.c joueur3.c joueur4.c joueur5.c avalattaque.c
+SRC=humain1.c humain2.c humain3.c joueur1.c joueur2.c joueur3.c joueur4.c joueur5.c avalattaque.c avalattaque2.c
 
 EXE=$(SRC:.c=.exe)
 STATIC=$(SRC:.c=.static)
