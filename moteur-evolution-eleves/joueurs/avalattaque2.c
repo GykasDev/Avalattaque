@@ -5,262 +5,224 @@
 #include "avalam.h"
 #include "moteur.h"
 
-int placerPionEvolution(T_Position p);
+int placerPionEvolution(T_Position p, T_ListeCoups listeCoups);
 int eviterPionMalus(T_Position p, T_ListeCoups listeCoups);
 int pileVoisine(T_Position p, T_ListeCoups listeCoups);
 int contre_isolement(T_Position p, T_ListeCoups l);
 int isolement(T_Position p, T_ListeCoups l);
-int ecrasement(T_Position p, T_ListeCoups l);
+int empilement(T_Position p, T_ListeCoups l);
 int rechercheIndice(int origine, int destination, T_ListeCoups listeCoups);
 
+// Fonction qui choisit le coup à jouer
 void choisirCoup(T_Position currentPosition, T_ListeCoups listeCoups)
 {
-	// Cette fonction peut appeler la fonction ecrireIndexCoup(coupChoisi);
-	// Pour sélectionner l'index d'un coup à jouer dans la liste l
-	int i, o, d;
-	int coup;
+	int coup; // indice du coup à jouer
 
-	// Priorités des stratégies:
-	coup = placerPionEvolution(currentPosition);
-	if (coup != -1)
+	// Si on est au début de la partie, on place les pions evolution
+	if (currentPosition.numCoup < 4)
 	{
-		printf("PLACER PION EVOLUTION\n"); // 1 - Placer pion evolution
+		printf("PLACER PION EVOLUTION\n");
+		coup = placerPionEvolution(currentPosition, listeCoups);
 		ecrireIndexCoup(coup);
 		return;
 	}
+	// Priorités des stratégies:
+	// 1 - Éviter pion malus
 	coup = eviterPionMalus(currentPosition, listeCoups);
 	if (coup != -1)
 	{
-		printf("EVITER PION MALUS\n"); // 2 - Eviter pion malus
+		printf("EVITER PION MALUS\n");
 		ecrireIndexCoup(coup);
 		return;
 	}
+	// 2 - Pile voisine
 	coup = pileVoisine(currentPosition, listeCoups);
 	if (coup != -1)
 	{
-		printf("PILES VOISINES\n"); // 3 - Piles voisines
+		printf("PILES VOISINES\n");
 		ecrireIndexCoup(coup);
 		return;
 	}
+	// 3 - Contre isolement
 	coup = contre_isolement(currentPosition, listeCoups);
 	if (coup != -1)
 	{
-		printf("CONTRE ISOLEMENT\n"); // 4 - Contre Isolement
+		printf("CONTRE ISOLEMENT\n");
 		ecrireIndexCoup(coup);
 		return;
 	}
+	// 4 - Isolement
 	coup = isolement(currentPosition, listeCoups);
 	if (coup != -1)
 	{
-		printf("ISOLEMENT\n"); // 5 - Isolement
+		printf("ISOLEMENT\n");
 		ecrireIndexCoup(coup);
 		return;
 	}
-	coup = ecrasement(currentPosition, listeCoups);
+	// 5 - Empilement
+	coup = empilement(currentPosition, listeCoups);
 	if (coup != -1)
 	{
-		printf("ECRASEMENT\n"); // 6 - Ecrasement
+		printf("EMPILEMENT\n");
 		ecrireIndexCoup(coup);
 		return;
 	}
+	// au cas ou aucune stratégie n'est possible mais normalement on ne devrait jamais arriver ici
 	ecrireIndexCoup(0);
+	return;
 }
 
-//------------------->STRATEGIE PLACER PION EVOLUTION<-------------------
-int placerPionEvolution(T_Position p)
+// Fonction qui place les pions evolution
+int placerPionEvolution(T_Position p, T_ListeCoups listeCoups)
 {
-	int i;
-	for (i = 0; i < NBCASES; i++)
+	int coup;				// indice du coup à jouer
+	int bonusPos;			// Position du pion bonus
+	int voisinPos;			// Position d'un voisin du pion bonus
+	T_Voisins voisinsBonus; // Voisins du pion bonus
+
+	if (p.numCoup > 1)
 	{
-		if (p.trait == 1)
+		printf("PLACER PION MALUS\n");
+		// Sélectionne la position du pion malus en fonction de la couleur du joueur
+		bonusPos = (p.trait == JAU) ? p.evolution.bonusR : p.evolution.bonusJ;
+		// Obtient les voisins de la position du pion malus
+		voisinsBonus = getVoisins(bonusPos);
+		// Parcourt les voisins du pion malus
+		for (int i = 0; i < voisinsBonus.nb; i++)
 		{
-			if (p.evolution.malusJ == i) // Si on est jaune et que le malus jaune a déjà ete placé, on change de stratégie
-				return -1;
-		}
-		else
-		{
-			if (p.evolution.malusR == i) // Même chose pour le joueur rouge
-				return -1;
+			voisinPos = voisinsBonus.cases[i];
+			// Recherche un coup dans la liste des coups disponibles pour le voisin du pion malus
+			coup = rechercheIndice(voisinPos, voisinPos, listeCoups);
+			if (coup != -1)
+				return coup; // Renvoie le coup trouvé
 		}
 	}
-	for (i = 0; i < NBCASES; i++)
-	{
-		if (p.evolution.bonusR == i) // Si un pion évolution a déjà été placé, on ne place plus le pion bonus mais le pion malus
-		{
-			if (p.trait == 1)
-				return 13; // Position choisie pour les jaunes: 26
-			else
-				return 6; // Position choisie pour les rouges: 14
-		}
-	}
-	if (p.trait == 1)
-		return 14; // Si on place le bonus jaune on le place en position 28 (coup 14)
-	else
-		return 23; // Si on place le bonus rouge, on choisit le coup 23
+
+	printf("PLACER PION BONUS\n");
+	// Place le pion bonus en fonction de la couleur du joueur
+	return (p.trait == JAU) ? 14 : 23; // Renvoie la position du pion bonus
 }
 
-//------------------->STRATEGIE EVITER PION MALUS<-------------------
+// Fonction qui permet d'éviter les pions malus
 int eviterPionMalus(T_Position p, T_ListeCoups listeCoups)
 {
-	int i, j, k, l;
-	int o, d;	   // Origine et destination
-	int pos;	   // Enregistre la position d'un voisin du pion bonus
-	int voisMalus; // Entregistre la position d'un voisin du pion malus
-	int voisBonus;
-	int indice;
-	T_Voisins v; // Voisins du bonus
-	T_Voisins m; // Voisins du pion malus
-	for (i = 0; i < NBCASES; i++)
+	int pos;	   // Position d'un voisin du pion bonus
+	int voisMalus; // Position d'un voisin du pion malus
+	T_Voisins v;   // Voisins du pion bonus
+	T_Voisins m;   // Voisins du pion malus
+
+	// Parcourir toutes les cases du plateau
+	for (int i = 0; i < NBCASES; i++)
 	{
-		if (p.trait == 1) // JOUEUR JAUNE
+		// Vérifier si la case courante correspond à la position du pion bonus
+		if (p.evolution.bonusJ == i || p.evolution.bonusR == i)
 		{
-			if (p.evolution.bonusJ == i)
+			v = getVoisins(i); // Récupérer les voisins du pion bonus
+			// Parcourir les voisins du pion bonus
+			for (int j = 0; j < v.nb; j++)
 			{
-				v = getVoisins(i); // On récupère les voisins du pion étudié
-				for (j = 0; j < v.nb; j++)
+				pos = v.cases[j]; // Enregistrer la position du voisin
+				// Vérifier si le voisin est un pion malus
+				if (p.evolution.malusR == v.cases[j] || p.evolution.malusJ == v.cases[j])
 				{
-					pos = v.cases[j];					  // On enregistre la position des voisins dans pos
-					if (p.evolution.malusR == v.cases[j]) // Si un des pion voisin est un malus rouge
+					m = getVoisins(pos); // Récupérer les voisins du pion malus
+					// Parcourir les voisins du pion malus
+					for (int k = 0; k < m.nb; k++)
 					{
-						m = getVoisins(pos);	   // On récupère les voisins du malus en question
-						for (k = 0; k < m.nb; k++) // On recherche un voisin au malus rouge
-						{
-							voisMalus = m.cases[k];				// On enregistre la position du voisin dans posMalus
-							if (p.cols[voisMalus].couleur == 2) // Le pion malus a un voisin rouge
-							{
-								o = pos;
-								d = voisMalus;
-								indice = rechercheIndice(o, d, listeCoups);
-								return indice;
-							}
-						}
-					}
-				}
-			}
-		}
-		else // JOUEUR ROUGE
-		{
-			if (p.evolution.bonusR == i)
-			{
-				v = getVoisins(i); // On récupère les voisins du pion étudié
-				for (j = 0; j < v.nb; j++)
-				{
-					pos = v.cases[j];					  // On enregistre la position des voisins dans pos
-					if (p.evolution.malusJ == v.cases[j]) // Si un des pion voisin est un malus rouge
-					{
-						m = getVoisins(pos);	   // On récupère les voisins du malus en question
-						for (k = 0; k < m.nb; k++) // On recherche un voisin au malus rouge
-						{
-							voisMalus = m.cases[k];				// On enregistre la position du voisin dans posMalus
-							if (p.cols[voisMalus].couleur == 1) // Le pion malus a un voisin rouge
-							{
-								o = pos;
-								d = voisMalus;
-								indice = rechercheIndice(o, d, listeCoups);
-								return indice;
-							}
-						}
+						voisMalus = m.cases[k]; // Enregistrer la position du voisin du malus
+						// Vérifier si le voisin est un pion
+						if (p.cols[voisMalus].couleur != p.trait)
+							return rechercheIndice(pos, voisMalus, listeCoups);
 					}
 				}
 			}
 		}
 	}
-	return -1;
+
+	return -1; // Si aucun coup n'a été trouvé, renvoyer -1
 }
 
-//------------------->STRATEGIE PILES VOISINES<-------------------
+// Fonction qui permet de finir une pile
 int pileVoisine(T_Position p, T_ListeCoups listeCoups)
 {
-	int i, j;
-	int voi;
-	T_Voisins voisins;
+	int i, j;		   // Variables de boucle
+	int voi;		   // Position d'un voisin
+	T_Voisins voisins; // Voisins d'une case
 	for (i = 0; i < NBCASES; i++)
 	{
-		voisins = getVoisins(i);		 // Récupère les voisins de
-										 // chaques cases
-		for (j = 0; j < voisins.nb; j++) // Pour chaque voisins de
-		{								 // chaques case
+		voisins = getVoisins(i);
+		for (j = 0; j < voisins.nb; j++)
+		{
 			voi = voisins.cases[j];
-			if (p.cols[i].nb + p.cols[voi].nb == 5)
+			if (p.cols[i].nb + p.cols[voi].nb == 5) // Si la somme des pions des deux piles voisines est égale à 5
 			{
-				if ((p.cols[i].couleur == p.trait) & (p.cols[i].nb != 0))																				// Une des deux piles est une
-				{																																		// pile amie
-					if (p.cols[voi].couleur != p.trait & (p.cols[voi].nb != 0))																			// L'autre pile est une pile
-					{																																	// ennemie
-						if (((p.evolution.bonusR != voi) & (p.evolution.bonusJ != voi)) & ((p.evolution.malusJ == voi) || (p.evolution.malusR == voi))) // Une des deux pile a un
-																																						// malus et pas de bonus pour
-																																						// compenser
-						{
-							printf("On joue le coup %d sur %d\n", voi, i);
-							return rechercheIndice(voi, i, listeCoups);
-						}
-						else // Aucune des deux pile n'a de
-						{	 // malus
-							printf("On joue le coup %d sur %d\n", i, voi);
-							return rechercheIndice(i, voi, listeCoups);
-						}
+				if ((p.cols[i].couleur == p.trait) && (p.cols[i].nb != 0))		 // Si la pile d'origine est de la couleur du joueur en cours et n'est pas vide
+					if (p.cols[voi].couleur != p.trait && (p.cols[voi].nb != 0)) // Si la pile voisine est d'une couleur différente du joueur en cours et n'est pas vide
+					{
+						if (((p.evolution.bonusR != voi) && (p.evolution.bonusJ != voi)) & ((p.evolution.malusJ == voi) || (p.evolution.malusR == voi)))
+							// Si la pile voisine n'est pas le bonus du joueur en cours et est le malus du joueur adverse
+							return rechercheIndice(voi, i, listeCoups); // Jouer le coup pour inverser les piles
+						else
+							return rechercheIndice(i, voi, listeCoups); // Jouer le coup pour inverser les piles
 					}
-				}
 			}
 		}
 	}
-	return -1;
+	return -1; // Aucun coup possible pour finir une pile voisine
 }
 
-//------------------->STRATEGIE CONTRE ISOLEMENT<-------------------
+// Fonction qui permet de jouer un coup pour éviter l'isolement d'un pion adverse
 int contre_isolement(T_Position p, T_ListeCoups l)
 {
-	int i, j;
-	int voisin;
-	int nbVoisin = 0;
-	int amis = 1;
-	T_Voisins Voisins;
+	int i, j;		   // Variables de boucle
+	int voisin;		   // Position d'un voisin
+	int nbVoisin = 0;  // Nombre de voisins
+	int amis = 1;	   // Nombre de pions amis
+	T_Voisins Voisins; // Voisins d'une case
+
+	// Parcourir toutes les cases du plateau
 	for (i = NBCASES - 1; i >= 0; i--)
 	{
 		Voisins = getVoisins(i);
+		// Compter les voisins de la case courante
 		for (j = 0; j < Voisins.nb; j++)
 		{
 			voisin = Voisins.cases[j];
-			if ((p.cols[voisin].nb != 0) & (p.cols[voisin].nb != 5))
+			if ((p.cols[voisin].nb != 0) && (p.cols[voisin].nb != 5))
 				nbVoisin++;
 		}
-		if (i == 11)
-			printf("TEST PION 11: %d\n", nbVoisin);
-		if ((nbVoisin <= 2) & (p.cols[i].couleur != p.trait) & (p.cols[i].nb != 0) & (p.cols[i].nb != 5)) // Un pion adverse a moins de 3 voisins
+		// Vérifier si la case courante est un pion adverse isolé
+		if ((nbVoisin <= 2) & (p.cols[i].couleur != p.trait) && (p.cols[i].nb != 0) & (p.cols[i].nb != 5))
 		{
-			if (nbVoisin == 1) // Est ce que le pion adverse n'a qu'un voisin ?
+			if (nbVoisin == 1)
 			{
+				// Trouver le voisin unique
 				for (j = 0; j < Voisins.nb; j++)
 				{
-					if ((p.cols[Voisins.cases[j]].nb != 0) & (p.cols[Voisins.cases[j]].nb != 5))
+					if ((p.cols[Voisins.cases[j]].nb != 0) && (p.cols[Voisins.cases[j]].nb != 5))
 						voisin = Voisins.cases[j];
 				}
-				if ((p.cols[voisin].couleur == p.trait) & (p.cols[voisin].nb + p.cols[voisin].nb < 6)) // Est ce que ce pion est un pion ami ?
-				{
-					printf("Cas 1:: On joue le coup %d sur %d\n", voisin, i);
-					return rechercheIndice(voisin, i, l); // Ecraser le pion presque isolé par notre pion
-				}
-				else if (p.cols[i].nb + p.cols[voisin].nb < 6) // Le pion voisin est un pion ennemi
-				{
-					printf("Cas 2 :: On joue le coup %d sur %d\n", i, voisin);
-					return rechercheIndice(i, voisin, l); // Rapprocher le pion presque isolé
-				}
+
+				// Jouer le coup pour éviter l'isolement
+				if ((p.cols[voisin].couleur == p.trait) && (p.cols[voisin].nb + p.cols[voisin].nb < 6))
+					return rechercheIndice(voisin, i, l);
+				else if (p.cols[i].nb + p.cols[voisin].nb < 6)
+					return rechercheIndice(i, voisin, l);
 			}
-			else // Le pion adverse a plus d'un voisin
+			else
 			{
+				amis = 1;
+				// Vérifier si tous les voisins sont des alliés
 				for (j = 0; j < Voisins.nb; j++)
 				{
-					if ((p.cols[Voisins.cases[j]].nb != 0) & (p.cols[Voisins.cases[j]].couleur != p.trait))
+					if ((p.cols[Voisins.cases[j]].nb != 0) && (p.cols[Voisins.cases[j]].couleur != p.trait))
 						amis = 0;
 					else if ((p.cols[Voisins.cases[j]].nb != 0))
 						voisin = Voisins.cases[j];
 				}
-				if ((amis) & (p.cols[voisin].nb + p.cols[i].nb < 6)) // Les deux pions voisins sont des pions amis
-				{
-					printf("Cas 3 :: On joue le coup %d sur %d\n", voisin, i);
-					return rechercheIndice(voisin, i, l); // Ecraser le pion presque isolé par un de nos pion
-				}
-				amis = 1;
+				// Jouer le coup pour éviter l'isolement
+				if ((amis) && (p.cols[voisin].nb + p.cols[i].nb < 6))
+					return rechercheIndice(voisin, i, l);
 			}
 		}
 		nbVoisin = 0;
@@ -268,32 +230,33 @@ int contre_isolement(T_Position p, T_ListeCoups l)
 	return -1;
 }
 
-//------------------->STRATEGIE ISOLEMENT<------------------
+// Fonction qui permet d'isoler un pion
 int isolement(T_Position p, T_ListeCoups l)
 {
-	int i, j;
-	int indice;
-	int indice2;
-	int adv = -1;
-	int adv2 = -1;
-	int ami;
-	int voisin;
-	int nbVoisin; // Nombre de voisins du pion
-	int nbVoisinMin;
-	int priorite = -1; // Indice du pion que l'on choisit d'isoler
-	T_Voisins Voisins;
-	T_Voisins Voisins2;
-	printf("----------Appel à la fonction isolement\n");
+	int i, j;			// Variables de boucle
+	int indice;			// Position d'un voisin
+	int adv = -1;		// Position d'un pion adverse
+	int adv2 = -1;		// Position d'un pion adverse
+	int ami;			// Position d'un pion allié
+	int voisin;			// Position d'un voisin
+	int nbVoisin;		// Nombre de voisins
+	int nbVoisinMin;	// Nombre de voisins minimum
+	int priorite = -1;	// Priorité de la case à isoler
+	T_Voisins Voisins;	// Voisins d'une case
+	T_Voisins Voisins2; // Voisins d'une case
+
+	// Parcours des cases dans l'ordre inverse pour trouver la case avec le moins de voisins non vides
 	for (i = NBCASES - 1; i >= 0; i--)
 	{
 		Voisins = getVoisins(i);
-		for (j = 0; j < Voisins.nb; j++) // Compte le nombre de voisin
+		for (j = 0; j < Voisins.nb; j++)
 		{
 			voisin = Voisins.cases[j];
-			if ((p.cols[voisin].nb != 0) & (p.cols[voisin].nb != 5))
+			if ((p.cols[voisin].nb != 0) && (p.cols[voisin].nb != 5))
 				nbVoisin++;
 		}
-		if ((nbVoisin > 0) & (nbVoisin <= 4) & (p.cols[i].couleur == p.trait) & (p.cols[i].nb != 5) & (p.cols[i].nb != 0))
+		// Vérifie si la case i est de la couleur du joueur en cours, a moins de 5 pions et a entre 1 et 4 voisins non vides
+		if ((nbVoisin > 0) && (nbVoisin <= 4) && (p.cols[i].couleur == p.trait) && (p.cols[i].nb != 5) && (p.cols[i].nb != 0))
 		{
 			if (nbVoisin < nbVoisinMin)
 			{
@@ -303,115 +266,106 @@ int isolement(T_Position p, T_ListeCoups l)
 		}
 		nbVoisin = 0;
 	}
-	printf("On va isoler le pion %d\n", priorite);
+	// Recherche des adversaires de la case prioritaire
 	Voisins = getVoisins(priorite);
 	for (i = 0; i < Voisins.nb; i++)
 	{
 		indice = Voisins.cases[i];
-		if ((p.cols[indice].couleur != p.trait) & (p.cols[indice].nb != 0) & (p.cols[indice].nb != 5)) // Si notre pion a un voisin adverse;
-		{
+		if ((p.cols[indice].couleur != p.trait) && (p.cols[indice].nb != 0) && (p.cols[indice].nb != 5))
 			adv = indice;
-			printf("Le pion %d est un pion voisin et ennemi du pion %d", adv, priorite);
-		}
 	}
-	indice2 = indice;
 	if (adv != -1)
 	{
+		// Recherche des adversaires du premier adversaire
 		Voisins2 = getVoisins(adv);
 		for (i = 0; i < Voisins2.nb; i++)
 		{
 			indice = Voisins2.cases[i];
-			if ((p.cols[indice].couleur != p.trait) & (p.cols[indice].nb != 0) & (p.cols[indice].nb != 5)) // Si notre pion a un voisin adverse;
+			if ((p.cols[indice].couleur != p.trait) && (p.cols[indice].nb != 0) && (p.cols[indice].nb != 5))
 				adv2 = indice;
 		}
 		if (adv2 != -1)
+			return rechercheIndice(adv, adv2, l); // Retourne l'indice du coup correspondant
+		else
 		{
-			printf("Cas 0 :: On joue le coup %d sur %d\n", adv, adv2);
-			return rechercheIndice(adv, adv2, l); // On écrase le pion adverse par un autre pion adverse
-		}
-		else // Un pion ennemi voisin du pion ennemi à isolé n'a pas de voisin ennemi
-		{
-			// printf("On va poser le pion  %d ennemi sur un de nos pions\n", adv);
+			// Recherche d'une case voisine pour jouer un coup avec la case prioritaire
 			for (i = 0; i < Voisins2.nb; i++)
 			{
 				indice = Voisins2.cases[i];
-				if ((indice != priorite) & (p.cols[indice].nb + p.cols[adv].nb < 6))
-				{
-					printf("On joue le coup %d sur %d\n", indice, adv);
-					return rechercheIndice(indice, adv, l);
-				}
+				if ((indice != priorite) && (p.cols[indice].nb + p.cols[adv].nb < 6))
+					return rechercheIndice(indice, adv, l); // Retourne l'indice du coup correspondant
 			}
 		}
 		adv2 = -1;
 	}
-	else // Le pion à isoler n'a pas de voisin adverses
+	else
 	{
+		// Recherche d'un allié parmi les voisins de la case prioritaire
 		for (i = 0; i < Voisins.nb; i++)
 		{
 			indice = Voisins.cases[i];
-			if ((indice != priorite) & (p.cols[indice].nb != 0))
+			if ((indice != priorite) && (p.cols[indice].nb != 0))
 				ami = indice;
 		}
 		Voisins2 = getVoisins(ami);
 		for (i = 0; i < Voisins2.nb; i++)
 		{
 			indice = Voisins2.cases[i];
-			if ((p.cols[indice].couleur != p.trait) & (p.cols[indice].nb != 0))
+			if ((p.cols[indice].couleur != p.trait) && (p.cols[indice].nb != 0))
 				adv = indice;
 		}
-		if ((adv != -1) & (p.cols[ami].nb + p.cols[adv].nb < 5)) // Le voisin du pion à isoler à un voisin adverse
+		if ((adv != -1) && (p.cols[ami].nb + p.cols[adv].nb < 5))
+			return rechercheIndice(ami, adv, l); // Retourne l'indice du coup correspondant
+		else
 		{
-			printf("On va jouer le coup %d sur %d\n", ami, adv);
-			return rechercheIndice(ami, adv, l);
-		}
-		else // Le pion voisin du pion à isoler n'a pas de voisin adverse
-		{
+			// Recherche d'une autre case voisine pour jouer un coup avec l'allié
 			for (i = 0; i < Voisins2.nb; i++)
 			{
 				indice = Voisins2.cases[i];
-				if ((indice != priorite) & (p.cols[indice].nb != 0))
+				if ((indice != priorite) && (p.cols[indice].nb != 0))
 					adv = indice;
 			}
 			if (p.cols[ami].nb + p.cols[adv].nb < 6)
-			{
-				printf("On joue le coup %d sur %d\n", ami, adv);
-				return rechercheIndice(ami, adv, l);
-			}
+				return rechercheIndice(ami, adv, l); // Retourne l'indice du coup correspondant
 		}
 	}
-	adv = -1;
-	return -1;
+	return -1; // Aucun coup possible trouvé, retourne -1
 }
 
-//------------------->STRATEGIE ECRASEMENT//-------------------
-int ecrasement(T_Position p, T_ListeCoups l)
+// Fonction qui permet de jouer un coup pour empiler 2 pions
+int empilement(T_Position p, T_ListeCoups l)
 {
 	int origine;
 	int dest;
 	int i, j;
 	T_Voisins voisins;
+
+	// On parcours les cases de la position
 	for (i = NBCASES - 1; i >= 0; i--)
 	{
-		if ((p.cols[i].couleur != p.trait) & (p.cols[i].nb != 0)) // Si un trouve un pion adverse
+		// On cherche une case de notre couleur non vide
+		if ((p.cols[i].couleur != p.trait) & (p.cols[i].nb != 0))
 		{
 			origine = i;
 			voisins = getVoisins(origine);
+			// On cherche une case de l'adversaire non vide
 			for (j = 0; j < voisins.nb; j++)
 			{
 				dest = voisins.cases[j];
-				if ((p.cols[dest].couleur != p.trait) & (p.cols[dest].nb != 0) & (p.cols[dest].nb + p.cols[origine].nb < 6)) // Et que ce pion a un voisin adverse
+				if ((p.cols[dest].couleur != p.trait) & (p.cols[dest].nb != 0) & (p.cols[dest].nb + p.cols[origine].nb < 6))
 				{
-					printf("on joue le coup %d sur %d\n", origine, dest);
+					// On a trouvé : on retourne l'indice
 					return rechercheIndice(origine, dest, l);
 				}
 			}
-			for (j = 0; j < voisins.nb; j++) // Le pion n'a aucun voisin adverse
+			// On cherche une case de l'adversaire vide
+			for (j = 0; j < voisins.nb; j++)
 			{
 				dest = voisins.cases[j];
-				if ((p.cols[dest].nb != 0) & (dest != origine) & (p.cols[dest].nb + p.cols[origine].nb < 6)) // Le pion a un voisin ami
+				if ((p.cols[dest].nb != 0) & (dest != origine) & (p.cols[dest].nb + p.cols[origine].nb < 6))
 				{
-					printf("On joue le coup %d sur %d\n", dest, origine);
-					return rechercheIndice(dest, origine, l);
+					// On a trouvé : on retourne l'indice
+					return rechercheIndice(origine, dest, l);
 				}
 			}
 		}
@@ -419,17 +373,12 @@ int ecrasement(T_Position p, T_ListeCoups l)
 	return -1;
 }
 
-//------------------->FONCTION RECHERCHE INDICE<-------------------
+// Fonction qui permet de trouver le coup voulue dans la liste des coups
 int rechercheIndice(int origine, int destination, T_ListeCoups listeCoups)
 {
-	int i;
-	int o, d;
-	printf("Appel à la fonction recherche Indice\n");
-	for (i = 0; i < listeCoups.nb; i++)
+	for (int i = 0; i < listeCoups.nb; i++)
 	{
-		o = listeCoups.coups[i].origine;
-		d = listeCoups.coups[i].destination;
-		if ((o == origine) && (d == destination))
+		if ((listeCoups.coups[i].origine == origine) && (listeCoups.coups[i].destination == destination))
 			return i;
 	}
 	return -1;
